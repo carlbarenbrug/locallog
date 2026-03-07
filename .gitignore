@@ -1,0 +1,74 @@
+//
+//  .gitignore
+//  locallog
+//
+//  Created by FormFeelingFunction
+//
+
+# Xcode
+build/
+DerivedData/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.xcuserstate
+
+# Swift Package Manager
+.build/
+Packages/
+Package.pins
+Package.resolved
+.swiftpm/xcode/package.xcworkspace/
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# Carthage
+Carthage/Build/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+# Archives
+*.xcarchive
+
+# Xcode Server
+*.xcscheme
+*.xctestrun
+
+# Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# App data
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Icon?
+Icon?
+
+# Local workspace artifacts
+.icon-import/
+.icon-import-archive/
+Icon Exports/
+Archive/
+*.zip
+Screen Recording*.mov

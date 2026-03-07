@@ -1,0 +1,13 @@
+{
+  "images" : [
+    {
+      "filename" : "dock_dark_1024.png",
+      "idiom" : "mac",
+      "scale" : "1x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

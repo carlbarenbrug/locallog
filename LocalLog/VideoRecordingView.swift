@@ -786,10 +786,11 @@ struct VideoRecordingView: View {
             Spacer()
 
             ZStack(alignment: .bottom) {
-                HStack(spacing: 8) {
+                HStack(spacing: 20) {
                     if cameraManager.isRecording {
-                        Text("recording")
-                            .foregroundColor(.red.opacity(0.92))
+                        Circle()
+                            .fill(Color(red: 1, green: 0, blue: 0))
+                            .frame(width: 12, height: 12)
 
                         recordingControlButton
 

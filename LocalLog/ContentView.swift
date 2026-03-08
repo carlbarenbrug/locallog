@@ -602,7 +602,7 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
 
                 if !showVideoTranscriptEditor {
-                    Button("notes") {
+                    Button("show notes") {
                         showVideoTranscriptEditor = true
                     }
                     .buttonStyle(.plain)
@@ -635,7 +635,7 @@ struct ContentView: View {
                         .padding(.bottom, 16)
 
                     if text.isEmpty {
-                        Text("add transcript notes...")
+                        Text("add video notes...")
                             .font(appFont(editorFontSize))
                             .foregroundColor(editorTextColor.opacity(0.55))
                             .padding(.leading, 30)
@@ -645,7 +645,7 @@ struct ContentView: View {
 
                     HStack {
                         Spacer()
-                        Button("close") {
+                        Button("hide notes") {
                             showVideoTranscriptEditor = false
                         }
                         .buttonStyle(.plain)

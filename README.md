@@ -22,15 +22,11 @@ Local Log is a local-first macOS journal app focused on fast capture with minima
 2. Select the `LocalLog` scheme
 3. Build and run on `My Mac`
 
-## Share Unsigned Build
+## Share Notarized Build
 
-If you share an unsigned `.app`/`.zip`, testers may see a “damaged” warning due to macOS quarantine.
+Distribute the signed and notarized archive:
 
-After moving `Local Log.app` to `/Applications`, run:
-
-```bash
-xattr -dr com.apple.quarantine "/Applications/Local Log.app" && open "/Applications/Local Log.app"
-```
+- `dist/Local-Log-macOS-notarized.zip`
 
 ## Data Storage
 

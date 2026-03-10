@@ -1,6 +1,8 @@
 # Local Log
 
-Local Log is a local-first macOS journal app focused on fast capture with minimal UI friction.
+Local Log is a minimal and open-source macOS journaling app built for fast, frictionless capture. It lets you record both text and video entries in one quiet, focused space, with everything stored locally on your Mac for privacy and simplicity. No accounts, no cloud dependency, no clutter—just a clean archive of your thoughts, searchable and always yours. With autosave, editable entry titles, keyboard shortcuts, and light and dark mode support, Local Log is designed to stay out of the way so you can get straight to logging.
+
+Design inspired by iA Writer and Freewrite.
 
 ## Current Scope
 

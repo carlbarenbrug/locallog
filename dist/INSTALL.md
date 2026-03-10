@@ -1,7 +1,7 @@
 # Local Log (macOS)
 
 ## Install
-1. Download `Local-Log-macOS-notarized.zip`.
+1. Download `Local-Log-macOS.zip`.
 2. Unzip it.
 3. Move `Local Log.app` to `Applications`.
 4. Open `Local Log.app`.

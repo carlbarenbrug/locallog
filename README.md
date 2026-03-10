@@ -27,7 +27,7 @@ Local Log is a local-first macOS journal app focused on fast capture with minima
 
 Distribute the signed and notarized archive:
 
-- `dist/Local-Log-macOS-notarized.zip`
+- `dist/Local-Log-macOS.zip`
 
 ## Data Storage
 

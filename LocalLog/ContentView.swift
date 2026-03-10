@@ -11,7 +11,7 @@ enum LogEntryKind: String {
 
 struct LogEntry: Identifiable, Equatable {
     let id: UUID
-    let filename: String
+    var filename: String
     let timestamp: Date
     var previewText: String
     var cachedContent: String
@@ -96,7 +96,6 @@ struct ContentView: View {
     }()
 
     private let fileManager = FileManager.default
-    private let titlesStore = TitlesStore(directory: ContentView.storageDirectory)
     private let timestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -291,7 +290,7 @@ struct ContentView: View {
                     .gesture(
                         DragGesture(minimumDistance: 24)
                             .onEnded { value in
-                                if value.translation.width > 70 {
+                                if value.translation.width < -70 {
                                     withAnimation(.easeOut(duration: 0.2)) {
                                         showingSidebar = false
                                     }
@@ -321,7 +320,7 @@ struct ContentView: View {
                     .gesture(
                         DragGesture(minimumDistance: 24)
                             .onEnded { value in
-                                if value.translation.width < -70 {
+                                if value.translation.width > 70 {
                                     withAnimation(.easeOut(duration: 0.2)) {
                                         showingSidebar = true
                                     }
@@ -490,14 +489,14 @@ struct ContentView: View {
         let threshold: CGFloat = 55
 
         if showingSidebar && sidebarHovering {
-            if swipeAccumX < -threshold {
+            if swipeAccumX > threshold {
                 withAnimation(.easeOut(duration: 0.2)) {
                     showingSidebar = false
                 }
                 swipeAccumX = 0
             }
         } else if !showingSidebar && openZoneHovering {
-            if swipeAccumX > threshold {
+            if swipeAccumX < -threshold {
                 withAnimation(.easeOut(duration: 0.2)) {
                     showingSidebar = true
                 }
@@ -579,7 +578,7 @@ struct ContentView: View {
         VStack(spacing: 0) {
             ZStack(alignment: .bottomTrailing) {
                 if let videoURL = videoURLForSelectedEntry {
-                    VideoPlayerView(videoURL: videoURL, isPlaybackSuspended: false)
+                    VideoPlayerView(videoURL: videoURL, isPlaybackSuspended: false, shouldAutoPlay: false)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color.black)
                 } else {
@@ -698,13 +697,13 @@ struct ContentView: View {
 
             footerDivider
 
-            HoverOpacityButton(title: "video", shortcuts: ["⌘", "V"], showShortcuts: !shouldHideFooterShortcuts) {
+            HoverOpacityButton(title: "video", shortcuts: ["⌘", "R"], showShortcuts: !shouldHideFooterShortcuts) {
                 startVideoEntry()
             }
 
             footerDivider
 
-            HoverOpacityButton(title: "history", shortcuts: ["⌘", "H"], showShortcuts: !shouldHideFooterShortcuts) {
+            HoverOpacityButton(title: "archive", shortcuts: ["⌘", "H"], showShortcuts: !shouldHideFooterShortcuts) {
                 showingSidebar.toggle()
             }
         }
@@ -866,6 +865,9 @@ struct ContentView: View {
             Button("Rename") {
                 beginTitleEdit(for: entry)
             }
+            Button("Show in Finder") {
+                showEntryInFinder(entry)
+            }
             Button("Delete", role: .destructive) {
                 selectedEntryId = entry.id
                 showingDeleteConfirmation = true
@@ -882,12 +884,8 @@ struct ContentView: View {
     private func commitTitleEdit() {
         guard let entryId = editingTitleEntryId else { return }
         let trimmed = titleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            titlesStore.removeTitle(for: entryId)
-        } else if let entry = entries.first(where: { $0.id == entryId }), trimmed != defaultTitle(for: entry) {
-            titlesStore.setTitle(trimmed, for: entryId)
-        } else {
-            titlesStore.removeTitle(for: entryId)
+        if let index = entries.firstIndex(where: { $0.id == entryId }) {
+            renameEntryFiles(at: index, to: trimmed.isEmpty ? "untitled" : trimmed)
         }
 
         editingTitleEntryId = nil
@@ -896,20 +894,7 @@ struct ContentView: View {
     }
 
     private func titleForEntry(_ entry: LogEntry) -> String {
-        titlesStore.title(for: entry.id) ?? defaultTitle(for: entry)
-    }
-
-    private func defaultTitle(for entry: LogEntry) -> String {
-        if entry.kind == .video {
-            return "untitled"
-        }
-
-        guard hasCompletedFirstWord(in: entry.cachedContent) else {
-            return "untitled"
-        }
-
-        let generated = previewText(from: entry.cachedContent)
-        return generated.isEmpty ? "untitled" : generated
+        storedBaseName(for: entry).replacingOccurrences(of: "-", with: " ")
     }
 
     private func toggleFullscreen() {
@@ -1038,7 +1023,6 @@ struct ContentView: View {
             }
         }
 
-        titlesStore.removeTitle(for: entry.id)
         entries.remove(at: index)
 
         if let replacement = entries.first {
@@ -1094,10 +1078,6 @@ struct ContentView: View {
         return normalized.count > 90 ? prefix + "..." : prefix
     }
 
-    private func hasCompletedFirstWord(in content: String) -> Bool {
-        content.range(of: #"\S+\s+"#, options: .regularExpression) != nil
-    }
-
     private func loadText(for entry: LogEntry) -> String {
         let sourceFilename: String
         if entry.kind == .text {
@@ -1112,7 +1092,7 @@ struct ContentView: View {
     }
 
     private func defaultTranscriptFilename(forVideoFilename videoFilename: String) -> String {
-        videoFilename.replacingOccurrences(of: ".mov", with: "-transcript.md")
+        videoFilename.replacingOccurrences(of: ".mov", with: "-notes.md")
     }
 
     private func recordingDurationSeconds(for videoURL: URL) -> Double? {
@@ -1122,7 +1102,112 @@ struct ContentView: View {
         return durationSeconds
     }
 
-    private func parseTextFilename(_ filename: String) -> (id: UUID, timestamp: Date)? {
+    private func showEntryInFinder(_ entry: LogEntry) {
+        let url = ContentView.storageDirectory.appendingPathComponent(entry.filename)
+        guard fileManager.fileExists(atPath: url.path) else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    private func storedBaseName(for entry: LogEntry) -> String {
+        if let modern = parseModernStoredFilename(entry.filename, pathExtension: entry.kind == .video ? "mov" : "md") {
+            return modern.baseName
+        }
+        return "untitled"
+    }
+
+    private func sanitizeStoredBaseName(_ title: String) -> String {
+        let invalidCharacters = CharacterSet(charactersIn: "/:\\?%*|\"<>")
+        let cleanedScalars = title.unicodeScalars.map { invalidCharacters.contains($0) ? " " : Character($0) }
+        let cleaned = String(cleanedScalars)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: "-", options: .regularExpression)
+            .replacingOccurrences(of: "-{2,}", with: "-", options: .regularExpression)
+        return cleaned.isEmpty ? "untitled" : cleaned
+    }
+
+    private func timestampStamp(for timestamp: Date) -> String {
+        timestampFormatter.string(from: timestamp)
+    }
+
+    private func textFilename(baseName: String, timestamp: Date) -> String {
+        "\(baseName)-\(timestampStamp(for: timestamp)).md"
+    }
+
+    private func videoFilename(baseName: String, timestamp: Date) -> String {
+        "\(baseName)-\(timestampStamp(for: timestamp)).mov"
+    }
+
+    private func notesFilename(baseName: String, timestamp: Date) -> String {
+        "\(baseName)-\(timestampStamp(for: timestamp))-notes.md"
+    }
+
+    private func transcriptKey(baseName: String, timestamp: Date) -> String {
+        "\(baseName)|\(timestampStamp(for: timestamp))"
+    }
+
+    private func parseModernStoredFilename(_ filename: String, pathExtension: String) -> (baseName: String, timestamp: Date)? {
+        let pattern = "^(.*)-(\\d{4}-\\d{2}-\\d{2}-\\d{2}-\\d{2}-\\d{2})\\.\(NSRegularExpression.escapedPattern(for: pathExtension))$"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(filename.startIndex..<filename.endIndex, in: filename)
+        guard let match = regex.firstMatch(in: filename, range: range),
+              let baseRange = Range(match.range(at: 1), in: filename),
+              let timestampRange = Range(match.range(at: 2), in: filename) else {
+            return nil
+        }
+        let baseName = String(filename[baseRange])
+        let stamp = String(filename[timestampRange])
+        guard let timestamp = timestampFormatter.date(from: stamp) else { return nil }
+        return (baseName, timestamp)
+    }
+
+    private func parseModernNotesFilename(_ filename: String) -> (baseName: String, timestamp: Date)? {
+        let pattern = "^(.*)-(\\d{4}-\\d{2}-\\d{2}-\\d{2}-\\d{2}-\\d{2})-notes\\.md$"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(filename.startIndex..<filename.endIndex, in: filename)
+        guard let match = regex.firstMatch(in: filename, range: range),
+              let baseRange = Range(match.range(at: 1), in: filename),
+              let timestampRange = Range(match.range(at: 2), in: filename) else {
+            return nil
+        }
+        let baseName = String(filename[baseRange])
+        let stamp = String(filename[timestampRange])
+        guard let timestamp = timestampFormatter.date(from: stamp) else { return nil }
+        return (baseName, timestamp)
+    }
+
+    private func renameEntryFiles(at index: Int, to title: String) {
+        let baseName = sanitizeStoredBaseName(title)
+        let entry = entries[index]
+        let newPrimaryFilename = entry.kind == .text
+            ? textFilename(baseName: baseName, timestamp: entry.timestamp)
+            : videoFilename(baseName: baseName, timestamp: entry.timestamp)
+
+        if newPrimaryFilename != entry.filename {
+            let currentURL = ContentView.storageDirectory.appendingPathComponent(entry.filename)
+            let newURL = ContentView.storageDirectory.appendingPathComponent(newPrimaryFilename)
+            if fileManager.fileExists(atPath: currentURL.path) {
+                try? fileManager.moveItem(at: currentURL, to: newURL)
+            }
+            entries[index].filename = newPrimaryFilename
+        }
+
+        guard entry.kind == .video else { return }
+        let currentNotesFilename = entry.transcriptFilename ?? defaultTranscriptFilename(forVideoFilename: entry.filename)
+        let newNotesFile = notesFilename(baseName: baseName, timestamp: entry.timestamp)
+        if currentNotesFilename != newNotesFile {
+            let currentNotesURL = ContentView.storageDirectory.appendingPathComponent(currentNotesFilename)
+            let newNotesURL = ContentView.storageDirectory.appendingPathComponent(newNotesFile)
+            if fileManager.fileExists(atPath: currentNotesURL.path) {
+                try? fileManager.moveItem(at: currentNotesURL, to: newNotesURL)
+            }
+            entries[index].transcriptFilename = newNotesFile
+        }
+    }
+
+    private func parseTextFilename(_ filename: String) -> (id: UUID, timestamp: Date, baseName: String)? {
+        if let parsed = parseModernStoredFilename(filename, pathExtension: "md") {
+            return (UUID(), parsed.timestamp, parsed.baseName)
+        }
         guard filename.hasPrefix("["), filename.hasSuffix("].md"), let divider = filename.range(of: "]-[") else {
             return nil
         }
@@ -1136,10 +1221,13 @@ struct ContentView: View {
         let timestampString = String(filename[timestampStart..<timestampEnd])
         guard let timestamp = timestampFormatter.date(from: timestampString) else { return nil }
 
-        return (id: uuid, timestamp: timestamp)
+        return (uuid, timestamp, "untitled")
     }
 
-    private func parseVideoFilename(_ filename: String) -> (id: UUID, timestamp: Date)? {
+    private func parseVideoFilename(_ filename: String) -> (id: UUID, timestamp: Date, baseName: String)? {
+        if let parsed = parseModernStoredFilename(filename, pathExtension: "mov") {
+            return (UUID(), parsed.timestamp, parsed.baseName)
+        }
         guard filename.hasPrefix("["), filename.hasSuffix("].mov"), let divider = filename.range(of: "]-[") else {
             return nil
         }
@@ -1153,10 +1241,13 @@ struct ContentView: View {
         let timestampString = String(filename[timestampStart..<timestampEnd])
         guard let timestamp = timestampFormatter.date(from: timestampString) else { return nil }
 
-        return (id: uuid, timestamp: timestamp)
+        return (uuid, timestamp, "untitled")
     }
 
-    private func parseVideoTranscriptFilename(_ filename: String) -> (id: UUID, timestamp: Date)? {
+    private func parseVideoTranscriptFilename(_ filename: String) -> (id: UUID, timestamp: Date, baseName: String)? {
+        if let parsed = parseModernNotesFilename(filename) {
+            return (UUID(), parsed.timestamp, parsed.baseName)
+        }
         guard filename.hasPrefix("["), filename.hasSuffix("]-transcript.md"), let divider = filename.range(of: "]-[") else {
             return nil
         }
@@ -1170,26 +1261,30 @@ struct ContentView: View {
         let timestampString = String(filename[timestampStart..<timestampEnd])
         guard let timestamp = timestampFormatter.date(from: timestampString) else { return nil }
 
-        return (id: uuid, timestamp: timestamp)
+        return (uuid, timestamp, "untitled")
     }
 
     private func loadExistingEntries() {
         do {
             let files = try fileManager.contentsOfDirectory(at: ContentView.storageDirectory, includingPropertiesForKeys: nil)
-            let transcriptFiles = files.filter { $0.lastPathComponent.hasSuffix("-transcript.md") }
-            var transcriptLookup: [UUID: (filename: String, content: String)] = [:]
+            let transcriptFiles = files.filter {
+                $0.lastPathComponent.hasSuffix("-transcript.md") || $0.lastPathComponent.hasSuffix("-notes.md")
+            }
+            var transcriptLookup: [String: (filename: String, content: String)] = [:]
             for transcriptURL in transcriptFiles {
                 let filename = transcriptURL.lastPathComponent
                 guard parseVideoTranscriptFilename(filename) != nil else { continue }
                 let content = (try? String(contentsOf: transcriptURL, encoding: .utf8)) ?? ""
                 if let parsed = parseVideoTranscriptFilename(filename) {
-                    transcriptLookup[parsed.id] = (filename: filename, content: content)
+                    transcriptLookup[transcriptKey(baseName: parsed.baseName, timestamp: parsed.timestamp)] = (filename: filename, content: content)
                 }
             }
 
             let textEntries: [LogEntry] = files.compactMap { fileURL in
                 let filename = fileURL.lastPathComponent
-                guard filename != "titles.json", !filename.hasSuffix("-transcript.md") else { return nil }
+                guard filename != "titles.json",
+                      !filename.hasSuffix("-transcript.md"),
+                      !filename.hasSuffix("-notes.md") else { return nil }
                 guard let parsed = parseTextFilename(filename) else { return nil }
                 let content = (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
                 return LogEntry(
@@ -1208,7 +1303,7 @@ struct ContentView: View {
                 let filename = fileURL.lastPathComponent
                 guard let parsed = parseVideoFilename(filename) else { return nil }
 
-                let transcript = transcriptLookup[parsed.id]
+                let transcript = transcriptLookup[transcriptKey(baseName: parsed.baseName, timestamp: parsed.timestamp)]
                 let transcriptContent = transcript?.content ?? ""
                 let durationSeconds = recordingDurationSeconds(for: fileURL)
                 return LogEntry(
@@ -1253,7 +1348,7 @@ private extension LogEntry {
         let stamp = formatter.string(from: timestamp)
         return LogEntry(
             id: id,
-            filename: "[\(id)]-[\(stamp)].md",
+            filename: "untitled-\(stamp).md",
             timestamp: timestamp,
             previewText: "",
             cachedContent: "",
@@ -1267,7 +1362,7 @@ private extension LogEntry {
         let id = UUID()
         let timestamp = Date()
         let stamp = formatter.string(from: timestamp)
-        let transcriptFilename = "[\(id)]-[\(stamp)]-transcript.md"
+        let transcriptFilename = "untitled-\(stamp)-notes.md"
         let normalizedTranscript = transcript
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
@@ -1277,7 +1372,7 @@ private extension LogEntry {
             : (normalizedTranscript.count > 90 ? String(normalizedTranscript.prefix(90)) + "..." : normalizedTranscript)
         return LogEntry(
             id: id,
-            filename: "[\(id)]-[\(stamp)].mov",
+            filename: "untitled-\(stamp).mov",
             timestamp: timestamp,
             previewText: transcriptPreview,
             cachedContent: transcript,

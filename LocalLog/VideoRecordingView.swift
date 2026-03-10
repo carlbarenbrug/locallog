@@ -770,6 +770,12 @@ struct VideoRecordingView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 .clipped()
                 .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if cameraManager.isRecording || canRecord {
+                        toggleRecording()
+                    }
+                }
         } else {
             Color.white
                 .overlay {

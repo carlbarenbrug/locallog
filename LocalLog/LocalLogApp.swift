@@ -33,7 +33,7 @@ struct LocalLogApp: App {
                 Button("Video Entry") {
                     NotificationCenter.default.post(name: LogCommand.startVideoEntry, object: nil)
                 }
-                .keyboardShortcut("v", modifiers: [.command])
+                .keyboardShortcut("r", modifiers: [.command])
             }
 
             CommandGroup(replacing: .appVisibility) {
@@ -47,7 +47,7 @@ struct LocalLogApp: App {
                 Button("Video Entry") {
                     NotificationCenter.default.post(name: LogCommand.startVideoEntry, object: nil)
                 }
-                .keyboardShortcut("v", modifiers: [.command])
+                .keyboardShortcut("r", modifiers: [.command])
 
                 Divider()
 

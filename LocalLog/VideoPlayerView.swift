@@ -12,6 +12,8 @@ import AppKit
 
 private struct FillVideoPlayerSurface: NSViewRepresentable {
     let player: AVPlayer
+    let shouldAutoPlay: Bool
+    let focusRingColor: NSColor
     
     final class PlayerContainerView: NSView {
         private let playerView = AVPlayerView()
@@ -39,6 +41,7 @@ private struct FillVideoPlayerSurface: NSViewRepresentable {
             playerView.videoGravity = .resizeAspectFill
             playerView.showsFrameSteppingButtons = false
             playerView.updatesNowPlayingInfoCenter = false
+            playerView.focusRingType = .none
 
             addSubview(playerView)
             NSLayoutConstraint.activate([
@@ -49,29 +52,38 @@ private struct FillVideoPlayerSurface: NSViewRepresentable {
             ])
         }
 
-        func setPlayer(_ player: AVPlayer) {
+        func setPlayer(_ player: AVPlayer, shouldAutoPlay: Bool, focusRingColor: NSColor) {
             if playerView.player !== player {
                 playerView.player = player
             }
             player.isMuted = false
             player.volume = 1.0
+            playerView.showsSharingServiceButton = false
+            playerView.showsFullScreenToggleButton = false
+            playerView.showsFrameSteppingButtons = false
+            playerView.layer?.borderWidth = 0
+            playerView.layer?.borderColor = focusRingColor.cgColor
+            if !shouldAutoPlay {
+                playerView.window?.makeFirstResponder(nil)
+            }
         }
     }
 
     func makeNSView(context: Context) -> PlayerContainerView {
         let view = PlayerContainerView()
-        view.setPlayer(player)
+        view.setPlayer(player, shouldAutoPlay: shouldAutoPlay, focusRingColor: focusRingColor)
         return view
     }
     
     func updateNSView(_ nsView: PlayerContainerView, context: Context) {
-        nsView.setPlayer(player)
+        nsView.setPlayer(player, shouldAutoPlay: shouldAutoPlay, focusRingColor: focusRingColor)
     }
 }
 
 struct VideoPlayerView: View {
     let videoURL: URL
     let isPlaybackSuspended: Bool
+    let shouldAutoPlay: Bool
     @State private var player = AVPlayer()
     @State private var playbackStatusObservation: NSKeyValueObservation?
     @State private var playbackProgressObserver: Any?
@@ -84,7 +96,11 @@ struct VideoPlayerView: View {
 
     var body: some View {
         ZStack {
-            FillVideoPlayerSurface(player: player)
+            FillVideoPlayerSurface(
+                player: player,
+                shouldAutoPlay: shouldAutoPlay,
+                focusRingColor: NSColor(white: 0.55, alpha: 0.9)
+            )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
                 .opacity(hasRevealedCurrentItem ? 1 : 0)
@@ -128,7 +144,7 @@ struct VideoPlayerView: View {
             player.isMuted = false
             player.volume = 1.0
             player.seek(to: .zero)
-            if !isPlaybackSuspended {
+            if shouldAutoPlay && !isPlaybackSuspended {
                 player.playImmediately(atRate: 1.0)
             }
             return
@@ -145,7 +161,7 @@ struct VideoPlayerView: View {
                 if item.status == .readyToPlay {
                     self.currentItemReadyToPlay = true
                     self.revealVideoWhenReady()
-                    if !self.isPlaybackSuspended {
+                    if self.shouldAutoPlay && !self.isPlaybackSuspended {
                         self.player.playImmediately(atRate: 1.0)
                     }
                 }
@@ -157,7 +173,7 @@ struct VideoPlayerView: View {
         player.volume = 1.0
         configuredVideoURL = url
 
-        if !isPlaybackSuspended {
+        if shouldAutoPlay && !isPlaybackSuspended {
             player.playImmediately(atRate: 1.0)
         }
     }
@@ -209,7 +225,10 @@ struct VideoPlayerView: View {
     private func revealVideoWhenReady() {
         guard !hasRevealedCurrentItem else { return }
         guard !isPlaybackSuspended else { return }
-        guard currentItemReadyToPlay, playerIsActivelyPlaying, playbackSecondsForCurrentItem >= 1.0 else { return }
+        guard currentItemReadyToPlay else { return }
+        if shouldAutoPlay {
+            guard playerIsActivelyPlaying, playbackSecondsForCurrentItem >= 1.0 else { return }
+        }
         withAnimation(.easeOut(duration: 0.75)) {
             hasRevealedCurrentItem = true
         }
@@ -218,7 +237,7 @@ struct VideoPlayerView: View {
     private func applyPlaybackSuspension(_ suspended: Bool) {
         if suspended {
             player.pause()
-        } else if player.currentItem != nil {
+        } else if shouldAutoPlay && player.currentItem != nil {
             player.playImmediately(atRate: 1.0)
         }
     }

@@ -71,4 +71,5 @@ Icon?
 Icon Exports/
 Archive/
 *.zip
+!dist/Local-Log-macOS-notarized.zip
 Screen Recording*.mov

@@ -8,4 +8,4 @@
 
 ## Notes
 - This build is signed and notarized for direct distribution.
-- All journal data is stored locally under your sandboxed Documents container for the app.
+- All journal data is stored locally in `~/Documents/Local Log`.

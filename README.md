@@ -4,9 +4,10 @@ Local Log is a local-first macOS journal app focused on fast capture with minima
 
 ## Current Scope
 
-- Text-first journaling workflow
-- Right-hand history sidebar with search
-- Editable entry titles (stored separately from filenames)
+- Text journaling with autosave
+- Video logging with local recording and playback
+- Right-hand archive sidebar with search
+- Editable entry titles backed by local filenames
 - Autosave with debounce
 - Keyboard shortcuts via app menu commands
 - Light/dark UI support with dynamic Dock icon switching
@@ -34,15 +35,11 @@ Entries are stored in:
 
 `~/Documents/Local Log`
 
-Title overrides are stored in:
-
-`~/Documents/Local Log/titles.json`
-
 ## Keyboard Shortcuts
 
 - `Cmd+N` new entry
-- `Cmd+V` start video entry
-- `Cmd+H` toggle history
+- `Cmd+R` start video entry
+- `Cmd+H` toggle archive
 - `Cmd+F` focus search
 - `Cmd+Delete` delete selected entry
 - `Cmd++` increase text size

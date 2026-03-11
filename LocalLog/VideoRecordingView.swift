@@ -31,6 +31,9 @@ class CameraManager: NSObject, ObservableObject {
     private var isSettingUpSession = false
     private var hasNotifiedReady = false
     private var hasNotifiedCannotRecord = false
+    private var didAttemptSessionRecovery = false
+    private var sessionObservers: [NSObjectProtocol] = []
+    private var selectedVideoDeviceUniqueID: String?
     private var shouldRunLiveCaptions = false
     private var speechRecognizer = SFSpeechRecognizer(locale: Locale.current)
     private var speechRecognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -173,13 +176,25 @@ class CameraManager: NSObject, ObservableObject {
             self.isSettingUpSession = true
             defer { self.isSettingUpSession = false }
 
-            guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) else {
-                print("Failed to get camera/audio device")
+            let discoveredCameras = AVCaptureDevice.DiscoverySession(
+                deviceTypes: [.builtInWideAngleCamera, .external],
+                mediaType: .video,
+                position: .unspecified
+            ).devices
+            if !discoveredCameras.isEmpty {
+                let names = discoveredCameras.map(\.localizedName).joined(separator: ", ")
+                print("[CameraManager] discovered cameras: \(names)")
+            }
+
+            guard let videoDevice = self.preferredVideoDevice(from: discoveredCameras) else {
+                print("[CameraManager] failed to get camera device")
                 DispatchQueue.main.async {
                     self.notifyCannotRecordIfNeeded()
                 }
                 return
             }
+            self.selectedVideoDeviceUniqueID = videoDevice.uniqueID
+            print("[CameraManager] using camera: \(videoDevice.localizedName)")
 
             let discoveredMicrophones = AVCaptureDevice.DiscoverySession(
                 deviceTypes: [.microphone],
@@ -228,6 +243,8 @@ class CameraManager: NSObject, ObservableObject {
                 self.videoOutput = output
                 self.audioDataOutput = nil
                 self.isSessionConfigured = true
+                self.didAttemptSessionRecovery = false
+                self.registerSessionObservers(for: session)
                 print("[CameraManager] capture session configured with audio + video")
                 self.ensureSessionRunningAndPreviewAttached()
             } catch {
@@ -255,11 +272,36 @@ class CameraManager: NSObject, ObservableObject {
         return allCandidates.max(by: { score($0) < score($1) })
     }
 
+    private func preferredVideoDevice(from discoveredCameras: [AVCaptureDevice]) -> AVCaptureDevice? {
+        let defaultVideo = AVCaptureDevice.default(for: .video)
+        let allCandidates = Array(([defaultVideo].compactMap { $0 } + discoveredCameras))
+
+        func score(_ device: AVCaptureDevice) -> Int {
+            let name = device.localizedName.lowercased()
+            var value = 0
+            if device.uniqueID == defaultVideo?.uniqueID { value += 1000 }
+            if device.position == .front { value += 100 }
+            if device.position == .unspecified { value += 40 }
+            if device.uniqueID == selectedVideoDeviceUniqueID { value += 25 }
+            if name.contains("continuity") || name.contains("iphone") { value -= 25 }
+            return value
+        }
+
+        return allCandidates.max(by: { score($0) < score($1) })
+    }
+
     private func ensureSessionRunningAndPreviewAttached() {
         guard let captureSession = captureSession else { return }
-        
+
         if !captureSession.isRunning {
             captureSession.startRunning()
+        }
+        if captureSession.isRunning {
+            didAttemptSessionRecovery = false
+        } else {
+            print("[CameraManager] capture session failed to start running; attempting recovery")
+            attemptSessionRecovery(reason: "session failed to start")
+            return
         }
         attachPreviewLayerIfNeeded(session: captureSession)
     }
@@ -291,6 +333,114 @@ class CameraManager: NSObject, ObservableObject {
         guard !hasNotifiedCannotRecord else { return }
         hasNotifiedCannotRecord = true
         onCannotRecord?()
+    }
+
+    private func registerSessionObservers(for session: AVCaptureSession) {
+        clearSessionObservers()
+
+        let center = NotificationCenter.default
+        sessionObservers = [
+            center.addObserver(
+                forName: .AVCaptureSessionRuntimeError,
+                object: session,
+                queue: nil
+            ) { [weak self] notification in
+                self?.handleSessionRuntimeError(notification)
+            },
+            center.addObserver(
+                forName: .AVCaptureSessionWasInterrupted,
+                object: session,
+                queue: nil
+            ) { [weak self] notification in
+                self?.handleSessionWasInterrupted(notification)
+            },
+            center.addObserver(
+                forName: .AVCaptureSessionInterruptionEnded,
+                object: session,
+                queue: nil
+            ) { [weak self] _ in
+                self?.handleSessionInterruptionEnded()
+            }
+        ]
+    }
+
+    private func clearSessionObservers() {
+        let center = NotificationCenter.default
+        sessionObservers.forEach { center.removeObserver($0) }
+        sessionObservers.removeAll()
+    }
+
+    private func handleSessionRuntimeError(_ notification: Notification) {
+        let errorDescription: String
+        if let error = notification.userInfo?[AVCaptureSessionErrorKey] as? NSError {
+            errorDescription = "\(error.domain) (\(error.code))"
+        } else {
+            errorDescription = "unknown runtime error"
+        }
+        print("[CameraManager] capture session runtime error: \(errorDescription)")
+        attemptSessionRecovery(reason: "runtime error")
+    }
+
+    private func handleSessionWasInterrupted(_ notification: Notification) {
+        _ = notification
+        print("[CameraManager] capture session interrupted")
+    }
+
+    private func handleSessionInterruptionEnded() {
+        print("[CameraManager] capture session interruption ended")
+        attemptSessionRecovery(reason: "interruption ended")
+    }
+
+    private func attemptSessionRecovery(reason: String) {
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard let session = self.captureSession else { return }
+
+            if session.isRunning {
+                self.attachPreviewLayerIfNeeded(session: session)
+                return
+            }
+
+            if !self.didAttemptSessionRecovery {
+                self.didAttemptSessionRecovery = true
+                print("[CameraManager] retrying capture session start after \(reason)")
+                session.startRunning()
+                if session.isRunning {
+                    self.attachPreviewLayerIfNeeded(session: session)
+                    return
+                }
+            }
+
+            self.rebuildSession(reason: reason)
+        }
+    }
+
+    private func rebuildSession(reason: String) {
+        print("[CameraManager] rebuilding capture session after \(reason)")
+
+        if let videoOutput = videoOutput, videoOutput.isRecording {
+            videoOutput.stopRecording()
+        }
+
+        clearSessionObservers()
+
+        if let session = captureSession, session.isRunning {
+            session.stopRunning()
+        }
+
+        captureSession = nil
+        videoOutput = nil
+        audioDataOutput = nil
+        isSessionConfigured = false
+        didAttemptSessionRecovery = false
+        hasNotifiedReady = false
+        hasNotifiedCannotRecord = false
+
+        DispatchQueue.main.async {
+            self.previewLayer = nil
+        }
+
+        setupCamera()
     }
 
     func startRecording(to url: URL) {
@@ -361,6 +511,8 @@ class CameraManager: NSObject, ObservableObject {
                 videoOutput.stopRecording()
             }
 
+            self.clearSessionObservers()
+
             if let session = self.captureSession {
                 if session.isRunning {
                     session.stopRunning()
@@ -374,6 +526,8 @@ class CameraManager: NSObject, ObservableObject {
             self.isSettingUpSession = false
             self.hasNotifiedReady = false
             self.hasNotifiedCannotRecord = false
+            self.didAttemptSessionRecovery = false
+            self.selectedVideoDeviceUniqueID = nil
 
             DispatchQueue.main.async {
                 self.previewLayer = nil

@@ -207,10 +207,12 @@ struct ContentView: View {
         colorScheme == .dark ? Color.white.opacity(0.28) : Color.black.opacity(0.16)
     }
 
-    private var searchHighlightColor: Color {
-        colorScheme == .dark
-            ? Color(red: 0.34, green: 0.28, blue: 0.10)
-            : Color(red: 1.0, green: 0.93, blue: 0.55)
+    private var searchHighlightBackgroundColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.88) : Color.black.opacity(0.88)
+    }
+
+    private var searchHighlightTextColor: Color {
+        colorScheme == .dark ? .black : .white
     }
 
     private var hairlineWidth: CGFloat {
@@ -1104,7 +1106,8 @@ struct ContentView: View {
             while searchStart < base.endIndex,
                   let range = base.range(of: token, options: [], range: searchStart..<base.endIndex) {
                 if let attributedRange = Range(range, in: attributed) {
-                    attributed[attributedRange].backgroundColor = searchHighlightColor
+                    attributed[attributedRange].backgroundColor = searchHighlightBackgroundColor
+                    attributed[attributedRange].foregroundColor = searchHighlightTextColor
                 }
                 searchStart = range.upperBound
             }

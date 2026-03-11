@@ -30,7 +30,7 @@ Design inspired by iA Writer and Freewrite.
 Distribute the signed and notarized archive:
 
 - `dist/Local-Log-macOS.zip`
-- GitHub Release: `https://github.com/carlbarenbrug/locallog/releases/tag/v1.0.0`
+- GitHub Release: `https://github.com/carlbarenbrug/locallog/releases/latest`
 
 ## Data Storage
 

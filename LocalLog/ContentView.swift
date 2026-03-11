@@ -207,6 +207,12 @@ struct ContentView: View {
         colorScheme == .dark ? Color.white.opacity(0.28) : Color.black.opacity(0.16)
     }
 
+    private var searchHighlightColor: Color {
+        colorScheme == .dark
+            ? Color(red: 0.34, green: 0.28, blue: 0.10)
+            : Color(red: 1.0, green: 0.93, blue: 0.55)
+    }
+
     private var hairlineWidth: CGFloat {
         1.0 / (NSScreen.main?.backingScaleFactor ?? 2.0)
     }
@@ -790,6 +796,11 @@ struct ContentView: View {
     private func sidebarRow(for entry: LogEntry) -> some View {
         let isSelected = selectedEntryId == entry.id
         let isHovered = hoveredEntryId == entry.id
+        let titleText = titleForEntry(entry)
+        let timestampText = sidebarTimestampFormatter.string(from: entry.timestamp)
+        let previewValue = entry.previewText.isEmpty
+            ? (entry.kind == .video ? (recordingDurationText(for: entry) ?? "0:00") : "no content")
+            : entry.previewText
         let rowBackgroundColor: Color = isSelected
             ? selectedRowBackgroundColor
             : (isHovered
@@ -810,7 +821,7 @@ struct ContentView: View {
                                 commitTitleEdit()
                             }
                     } else {
-                        Text(titleForEntry(entry))
+                        Text(highlightedAttributedString(for: titleText))
                             .font(appFont(13))
                             .lineLimit(1)
                             .onTapGesture(count: 2) {
@@ -836,17 +847,13 @@ struct ContentView: View {
 
                 Spacer(minLength: 8)
 
-                Text(sidebarTimestampFormatter.string(from: entry.timestamp))
+                Text(highlightedAttributedString(for: timestampText))
                     .font(appFont(11))
                     .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.65) : Color.black.opacity(0.55))
                     .lineLimit(1)
             }
 
-            Text(
-                entry.previewText.isEmpty
-                    ? (entry.kind == .video ? (recordingDurationText(for: entry) ?? "0:00") : "no content")
-                    : entry.previewText
-            )
+            Text(highlightedAttributedString(for: previewValue))
                 .font(appFont(11))
                 .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.65) : Color.black.opacity(0.55))
                 .lineLimit(2)
@@ -1077,6 +1084,33 @@ struct ContentView: View {
         guard !normalized.isEmpty else { return "" }
         let prefix = String(normalized.prefix(90))
         return normalized.count > 90 ? prefix + "..." : prefix
+    }
+
+    private var searchTokens: [String] {
+        searchText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: \.isWhitespace)
+            .map { $0.lowercased() }
+            .filter { !$0.isEmpty }
+    }
+
+    private func highlightedAttributedString(for value: String) -> AttributedString {
+        var attributed = AttributedString(value)
+        guard !value.isEmpty else { return attributed }
+
+        let base = value.lowercased()
+        for token in searchTokens {
+            var searchStart = base.startIndex
+            while searchStart < base.endIndex,
+                  let range = base.range(of: token, options: [], range: searchStart..<base.endIndex) {
+                if let attributedRange = Range(range, in: attributed) {
+                    attributed[attributedRange].backgroundColor = searchHighlightColor
+                }
+                searchStart = range.upperBound
+            }
+        }
+
+        return attributed
     }
 
     private func hasCompletedFirstWord(in content: String) -> Bool {

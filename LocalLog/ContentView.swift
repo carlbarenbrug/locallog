@@ -712,7 +712,7 @@ struct ContentView: View {
 
             footerDivider
 
-            HoverOpacityButton(title: "archive", shortcuts: ["⌘", "H"], showShortcuts: !shouldHideFooterShortcuts) {
+            HoverOpacityButton(title: showingSidebar ? "hide archive" : "show archive", shortcuts: ["⌘", "H"], showShortcuts: !shouldHideFooterShortcuts) {
                 showingSidebar.toggle()
             }
         }

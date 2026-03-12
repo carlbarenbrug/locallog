@@ -37,7 +37,7 @@ struct LocalLogApp: App {
             }
 
             CommandGroup(replacing: .appVisibility) {
-                Button("Toggle History") {
+                Button("Toggle Archive") {
                     NotificationCenter.default.post(name: LogCommand.toggleHistory, object: nil)
                 }
                 .keyboardShortcut("h", modifiers: [.command])
@@ -51,7 +51,7 @@ struct LocalLogApp: App {
 
                 Divider()
 
-                Button("Toggle History") {
+                Button("Toggle Archive") {
                     NotificationCenter.default.post(name: LogCommand.toggleHistory, object: nil)
                 }
                 .keyboardShortcut("h", modifiers: [.command])

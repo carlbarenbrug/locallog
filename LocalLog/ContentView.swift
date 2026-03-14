@@ -85,6 +85,132 @@ private struct HoverOpacityButton: View {
     }
 }
 
+private struct PassthroughSidebarOpenZone: NSViewRepresentable {
+    let onHoverChanged: (Bool) -> Void
+    let onOpenRequested: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> TrackingView {
+        let view = TrackingView()
+        view.coordinator = context.coordinator
+        context.coordinator.attach(to: view)
+        context.coordinator.onHoverChanged = onHoverChanged
+        context.coordinator.onOpenRequested = onOpenRequested
+        return view
+    }
+
+    func updateNSView(_ nsView: TrackingView, context: Context) {
+        nsView.coordinator = context.coordinator
+        context.coordinator.attach(to: nsView)
+        context.coordinator.onHoverChanged = onHoverChanged
+        context.coordinator.onOpenRequested = onOpenRequested
+    }
+
+    final class Coordinator {
+        weak var view: TrackingView?
+        var onHoverChanged: ((Bool) -> Void)?
+        var onOpenRequested: (() -> Void)?
+        private var localMonitor: Any?
+        private var dragStartLocation: NSPoint?
+
+        func attach(to view: TrackingView) {
+            guard self.view !== view else { return }
+            removeMonitor()
+            self.view = view
+            installMonitor()
+        }
+
+        func setHovering(_ hovering: Bool) {
+            onHoverChanged?(hovering)
+        }
+
+        private func installMonitor() {
+            localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
+                self?.handle(event)
+                return event
+            }
+        }
+
+        private func removeMonitor() {
+            if let localMonitor {
+                NSEvent.removeMonitor(localMonitor)
+                self.localMonitor = nil
+            }
+            dragStartLocation = nil
+        }
+
+        private func handle(_ event: NSEvent) {
+            guard let view, view.window != nil else { return }
+            let frameInWindow = view.convert(view.bounds, to: nil)
+            let location = event.locationInWindow
+
+            switch event.type {
+            case .leftMouseDown:
+                dragStartLocation = frameInWindow.contains(location) ? location : nil
+            case .leftMouseDragged:
+                guard let start = dragStartLocation else { return }
+                let translation = location.x - start.x
+                if translation > 70 {
+                    dragStartLocation = nil
+                    onOpenRequested?()
+                }
+            case .leftMouseUp:
+                dragStartLocation = nil
+            default:
+                break
+            }
+        }
+
+        deinit {
+            removeMonitor()
+        }
+    }
+
+    final class TrackingView: NSView {
+        weak var coordinator: Coordinator?
+        private var trackingArea: NSTrackingArea?
+
+        override var isFlipped: Bool { true }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let trackingArea {
+                removeTrackingArea(trackingArea)
+            }
+            let trackingArea = NSTrackingArea(
+                rect: bounds,
+                options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            )
+            addTrackingArea(trackingArea)
+            self.trackingArea = trackingArea
+        }
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            nil
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            super.mouseEntered(with: event)
+            coordinator?.setHovering(true)
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            super.mouseExited(with: event)
+            coordinator?.setHovering(false)
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            coordinator?.attach(to: self)
+        }
+    }
+}
+
 struct ContentView: View {
     private static let storageDirectory: URL = {
         let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -315,25 +441,20 @@ struct ContentView: View {
         }
         .overlay(alignment: .topTrailing) {
             if !showingSidebar && !isSelectedEntryVideo {
-                Color.clear
+                PassthroughSidebarOpenZone(
+                    onHoverChanged: { hovering in
+                        openZoneHovering = hovering
+                    },
+                    onOpenRequested: {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            showingSidebar = true
+                        }
+                    }
+                )
                     .frame(
                         width: max(24, windowWidth * 0.2),
                         height: max(0, windowHeight - swipeOpenZoneBottomInset),
                         alignment: .top
-                    )
-                    .contentShape(Rectangle())
-                    .onHover { hovering in
-                        openZoneHovering = hovering
-                    }
-                    .gesture(
-                        DragGesture(minimumDistance: 24)
-                            .onEnded { value in
-                                if value.translation.width > 70 {
-                                    withAnimation(.easeOut(duration: 0.2)) {
-                                        showingSidebar = true
-                                    }
-                                }
-                            }
                     )
             }
         }

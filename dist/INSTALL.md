@@ -8,4 +8,5 @@
 
 ## Notes
 - This build is signed and notarized for direct distribution.
-- All journal data is stored locally in `~/Documents/Local Log`.
+- Journal data is stored locally in `~/Documents/Local Log` by default.
+- You can change the archive location later from the app’s Settings window.

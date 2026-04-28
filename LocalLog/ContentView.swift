@@ -212,15 +212,6 @@ private struct PassthroughSidebarOpenZone: NSViewRepresentable {
 }
 
 struct ContentView: View {
-    private static let storageDirectory: URL = {
-        let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Local Log", isDirectory: true)
-        if !FileManager.default.fileExists(atPath: directory.path) {
-            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        }
-        return directory
-    }()
-
     private let fileManager = FileManager.default
     private let timestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -241,6 +232,7 @@ struct ContentView: View {
     ]
 
     @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var storageLocation: StorageLocationStore
 
     @AppStorage("fontSize") private var storedFontSize: Double = 18
 
@@ -468,6 +460,11 @@ struct ContentView: View {
         }
         .onDisappear {
             removeSwipeMonitor()
+        }
+        .onChange(of: storageLocation.directory) { _, _ in
+            commitTitleEdit()
+            flushPendingSave()
+            loadExistingEntries()
         }
         .onChange(of: text) { oldValue, newValue in
             updateSelectedEntryPreviewInMemory()
@@ -1049,7 +1046,7 @@ struct ContentView: View {
 
     private var videoURLForSelectedEntry: URL? {
         guard let entry = selectedEntry, entry.kind == .video else { return nil }
-        let videoURL = ContentView.storageDirectory.appendingPathComponent(entry.filename)
+        let videoURL = storageLocation.directory.appendingPathComponent(entry.filename)
         return fileManager.fileExists(atPath: videoURL.path) ? videoURL : nil
     }
 
@@ -1095,7 +1092,7 @@ struct ContentView: View {
 
         let durationSeconds = recordingDurationSeconds(for: temporaryVideoURL)
         let entry = LogEntry.createVideoEntry(with: timestampFormatter, transcript: transcript, durationSeconds: durationSeconds)
-        let destinationVideoURL = ContentView.storageDirectory.appendingPathComponent(entry.filename)
+        let destinationVideoURL = storageLocation.directory.appendingPathComponent(entry.filename)
 
         do {
             if fileManager.fileExists(atPath: destinationVideoURL.path) {
@@ -1104,7 +1101,7 @@ struct ContentView: View {
             try fileManager.moveItem(at: temporaryVideoURL, to: destinationVideoURL)
 
             if let transcriptFilename = entry.transcriptFilename {
-                let transcriptURL = ContentView.storageDirectory.appendingPathComponent(transcriptFilename)
+                let transcriptURL = storageLocation.directory.appendingPathComponent(transcriptFilename)
                 try entry.cachedContent.write(to: transcriptURL, atomically: true, encoding: .utf8)
             }
 
@@ -1143,12 +1140,12 @@ struct ContentView: View {
         }
 
         let entry = entries[index]
-        let fileURL = ContentView.storageDirectory.appendingPathComponent(entry.filename)
+        let fileURL = storageLocation.directory.appendingPathComponent(entry.filename)
         if fileManager.fileExists(atPath: fileURL.path) {
             try? fileManager.removeItem(at: fileURL)
         }
         if let transcriptFilename = entry.transcriptFilename {
-            let transcriptURL = ContentView.storageDirectory.appendingPathComponent(transcriptFilename)
+            let transcriptURL = storageLocation.directory.appendingPathComponent(transcriptFilename)
             if fileManager.fileExists(atPath: transcriptURL.path) {
                 try? fileManager.removeItem(at: transcriptURL)
             }
@@ -1178,7 +1175,7 @@ struct ContentView: View {
         let targetFilename = entry.kind == .text ? entry.filename : (entry.transcriptFilename ?? "")
         guard !targetFilename.isEmpty else { return }
 
-        let fileURL = ContentView.storageDirectory.appendingPathComponent(targetFilename)
+        let fileURL = storageLocation.directory.appendingPathComponent(targetFilename)
         do {
             try text.write(to: fileURL, atomically: true, encoding: .utf8)
             entries[index].cachedContent = text
@@ -1275,7 +1272,7 @@ struct ContentView: View {
             sourceFilename = entry.transcriptFilename ?? defaultTranscriptFilename(forVideoFilename: entry.filename)
         }
         guard !sourceFilename.isEmpty else { return "" }
-        let fileURL = ContentView.storageDirectory.appendingPathComponent(sourceFilename)
+        let fileURL = storageLocation.directory.appendingPathComponent(sourceFilename)
         guard let value = try? String(contentsOf: fileURL, encoding: .utf8) else { return "" }
         return value
     }
@@ -1292,7 +1289,7 @@ struct ContentView: View {
     }
 
     private func showEntryInFinder(_ entry: LogEntry) {
-        let url = ContentView.storageDirectory.appendingPathComponent(entry.filename)
+        let url = storageLocation.directory.appendingPathComponent(entry.filename)
         guard fileManager.fileExists(atPath: url.path) else { return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
@@ -1372,8 +1369,8 @@ struct ContentView: View {
             : videoFilename(baseName: baseName, timestamp: entry.timestamp)
 
         if newPrimaryFilename != entry.filename {
-            let currentURL = ContentView.storageDirectory.appendingPathComponent(entry.filename)
-            let newURL = ContentView.storageDirectory.appendingPathComponent(newPrimaryFilename)
+            let currentURL = storageLocation.directory.appendingPathComponent(entry.filename)
+            let newURL = storageLocation.directory.appendingPathComponent(newPrimaryFilename)
             if fileManager.fileExists(atPath: currentURL.path) {
                 try? fileManager.moveItem(at: currentURL, to: newURL)
             }
@@ -1384,8 +1381,8 @@ struct ContentView: View {
         let currentNotesFilename = entry.transcriptFilename ?? defaultTranscriptFilename(forVideoFilename: entry.filename)
         let newNotesFile = notesFilename(baseName: baseName, timestamp: entry.timestamp)
         if currentNotesFilename != newNotesFile {
-            let currentNotesURL = ContentView.storageDirectory.appendingPathComponent(currentNotesFilename)
-            let newNotesURL = ContentView.storageDirectory.appendingPathComponent(newNotesFile)
+            let currentNotesURL = storageLocation.directory.appendingPathComponent(currentNotesFilename)
+            let newNotesURL = storageLocation.directory.appendingPathComponent(newNotesFile)
             if fileManager.fileExists(atPath: currentNotesURL.path) {
                 try? fileManager.moveItem(at: currentNotesURL, to: newNotesURL)
             }
@@ -1455,7 +1452,7 @@ struct ContentView: View {
 
     private func loadExistingEntries() {
         do {
-            let files = try fileManager.contentsOfDirectory(at: ContentView.storageDirectory, includingPropertiesForKeys: nil)
+            let files = try fileManager.contentsOfDirectory(at: storageLocation.directory, includingPropertiesForKeys: nil)
             let transcriptFiles = files.filter {
                 $0.lastPathComponent.hasSuffix("-transcript.md") || $0.lastPathComponent.hasSuffix("-notes.md")
             }

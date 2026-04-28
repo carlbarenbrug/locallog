@@ -13,6 +13,7 @@ Design inspired by iA Writer and Freewrite.
 - Autosave with debounce
 - Keyboard shortcuts via app menu commands
 - Light/dark UI support with dynamic Dock icon switching
+- Customizable archive location with `~/Documents/Local Log` as the default
 
 ## Requirements
 
@@ -37,6 +38,8 @@ Distribute the signed and notarized archive:
 Entries are stored in:
 
 `~/Documents/Local Log`
+
+Users can change this from the app’s Settings window. Local Log will continue to use a `Local Log` folder, but it can now live somewhere other than Documents.
 
 ## Keyboard Shortcuts
 

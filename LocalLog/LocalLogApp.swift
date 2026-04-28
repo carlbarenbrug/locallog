@@ -12,6 +12,7 @@ import AppKit
 @main
 struct LocalLogApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var storageLocation = StorageLocationStore()
 
     init() {
         if let fontURL = Bundle.main.url(forResource: "geistmono-regular", withExtension: "ttf") {
@@ -22,6 +23,7 @@ struct LocalLogApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(storageLocation)
         }
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -92,6 +94,11 @@ struct LocalLogApp: App {
         .defaultSize(width: 1100, height: 600)
         .windowToolbarStyle(.unifiedCompact)
         .windowResizability(.contentSize)
+
+        Settings {
+            StorageSettingsView()
+                .environmentObject(storageLocation)
+        }
     }
 }
 

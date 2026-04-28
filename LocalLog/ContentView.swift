@@ -236,6 +236,12 @@ struct ContentView: View {
 
     @AppStorage("fontSize") private var storedFontSize: Double = 18
 
+    private var sidebarPreviewTextColor: Color {
+        colorScheme == .dark
+            ? Color(red: 0x8A / 255.0, green: 0x8A / 255.0, blue: 0x8A / 255.0)
+            : Color(red: 0x8B / 255.0, green: 0x8B / 255.0, blue: 0x8B / 255.0)
+    }
+
     @State private var entries: [LogEntry] = []
     @State private var selectedEntryId: UUID?
     @State private var text: String = ""
@@ -975,7 +981,7 @@ struct ContentView: View {
 
             Text(highlightedAttributedString(for: previewValue))
                 .font(appFont(11))
-                .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.65) : Color.black.opacity(0.55))
+                .foregroundStyle(sidebarPreviewTextColor)
                 .lineLimit(2)
         }
         .padding(.horizontal, 12)
